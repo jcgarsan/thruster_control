@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package>
+	<name>thruster_control</name>
+	<version>1.0.0</version>
+	<description>HROV thruster control. Initially, only the Girona500 is supported.</description>
+	<maintainer email="japerez@uji.es">javi</maintainer>
+	<maintainer email="garciaju@uji.es">javi</maintainer>
+	<license>BSD</license>
+
+	<build_depend>geometry_msgs</build_depend> 
+	<build_depend>std_msgs</build_depend>
+	<build_depend>tf</build_depend> 
+	<build_depend>underwater_sensor_msgs</build_depend>
+	<build_depend>hrov_control</build_depend>
+
+	<run_depend>geometry_msgs</run_depend>
+	<run_depend>std_msgs</run_depend>
+	<run_depend>tf</run_depend>
+	<run_depend>underwater_sensor_msgs</run_depend>
+	<run_depend>hrov_control</run_depend>
+
+	<buildtool_depend>catkin</buildtool_depend>
+
+
+</package>
