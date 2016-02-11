@@ -22,7 +22,8 @@
 #include <std_msgs/String.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Int8MultiArray.h>
-#include <hrov_control/HrovControlStdMsg.h>
+#include <actionlib/server/simple_action_server.h>
+#include <thruster_control/goToPoseAction.h>
 
 using namespace std;
 
@@ -43,21 +44,24 @@ class NavPiController
 		ros::Time		currentMissionTime;
 		ros::Duration	totalMissionTime;
 
-		std_msgs::Int8MultiArray	safetyAlarm;
-
+		std_msgs::Int8MultiArray	safetyMeasureAlarm;
 		
 		void GoToPose();
 		
 
+	protected:
+		ros::NodeHandle nh;
+		actionlib::SimpleActionServer<thruster_control::goToPoseAction> as_;
+		thruster_control::goToPoseResult   result_;
+		thruster_control::goToPoseFeedback feedback_;
+		string action_name_;
+	
 		
 	private:
-		ros::NodeHandle nh;
-
 		ros::Publisher		pub_odom;
 		ros::Subscriber		sub_odomInfo;
 		ros::Subscriber		sub_safetyInfo;
-		ros::Subscriber		sub_userControlInfo;
-		ros::ServiceServer	runBlackboxGotoPoseSrv;
+		
 		
 		geometry_msgs::Pose			robotCurrentPose;
 		geometry_msgs::Pose			robotLastPose;
@@ -67,7 +71,6 @@ class NavPiController
 
 		void odomCallback(const geometry_msgs::Pose::ConstPtr& odomValue);
 		void safetyMeasuresCallback(const std_msgs::Int8MultiArray::ConstPtr& msg);
-		void userControlReqCallback(const std_msgs::Bool::ConstPtr& msg);
-		bool enableRunBool(hrov_control::HrovControlStdMsg::Request &req, hrov_control::HrovControlStdMsg::Response &res);
+		void executeCB(const thruster_control::goToPoseGoalConstPtr &goal);
 
 };

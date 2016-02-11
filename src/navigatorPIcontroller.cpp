@@ -27,22 +27,15 @@
 using namespace std;
 
 
-int main(int argc, char **argv)
-{
-	ros::init(argc, argv, "navigatorPIcontroller");
-	NavPiController navPiControl;
-	ros::spin();
-}
 
-
-NavPiController::NavPiController()
+NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", boost::bind(&NavPiController::executeCB, this, _1), false)
 {
 	enableExecution		= false;
 	targetPosition		= false;
 	userControlRequest	= false;
 	
 	for (int i=0; i<=num_sensors; i++)
-		safetyAlarm.data.push_back(0);
+		safetyMeasureAlarm.data.push_back(0);
 	
 	//Publishers initialization
 	pub_odom = nh.advertise<nav_msgs::Odometry>("dataNavigator", 1);
@@ -50,11 +43,10 @@ NavPiController::NavPiController()
 	//Subscribers initialization
 	sub_odomInfo = nh.subscribe<geometry_msgs::Pose>("g500/pose", 1, &NavPiController::odomCallback, this);
 	sub_safetyInfo = nh.subscribe<std_msgs::Int8MultiArray>("safetyMeasures", 1, &NavPiController::safetyMeasuresCallback,this);
-	sub_userControlInfo = nh.subscribe<std_msgs::Bool>("userControlRequest", 1, &NavPiController::userControlReqCallback, this);
 
-	//Services initialization
-	runBlackboxGotoPoseSrv = nh.advertiseService("runBlackboxGotoPoseSrv", &NavPiController::enableRunBool, this);
-	
+	//Action initilization
+	as_.start();
+	ROS_INFO("Action server initialized");
 }
 
 
@@ -63,22 +55,37 @@ NavPiController::~NavPiController()
 }
 
 
-bool NavPiController::enableRunBool(hrov_control::HrovControlStdMsg::Request &req, hrov_control::HrovControlStdMsg::Response &res)
+//action server
+void NavPiController::executeCB(const thruster_control::goToPoseGoalConstPtr &goal)
 {
-	enableExecution = req.boolValue;
-	robotDesiredPosition.pose.position.x = req.robotTargetPosition.position.x;
-	robotDesiredPosition.pose.position.y = req.robotTargetPosition.position.y;
-	robotDesiredPosition.pose.position.z = req.robotTargetPosition.position.z;
+	feedback_.action="Initializing GoToPose().action";
+	as_.publishFeedback(feedback_);
+	enableExecution = goal->boolValue;
+	robotDesiredPosition.pose.position.x = goal->robotTargetPosition.position.x;
+	robotDesiredPosition.pose.position.y = goal->robotTargetPosition.position.y;
+	robotDesiredPosition.pose.position.z = goal->robotTargetPosition.position.z;
 	targetPosition = false;
-	initMissionTime = ros::Time::now();
+	initMissionTime = ros::Time::now();	
+
+	feedback_.action="Starting GoToPose().action";
+	as_.publishFeedback(feedback_);
 	GoToPose();
+
+	feedback_.action="GoToPose().action finished";
+	as_.publishFeedback(feedback_);
 	
 	if ((!targetPosition) and (!enableExecution))
-		res.boolValue = false;	//Mission finished with error
+	{
+		result_.succeed = false;	//Mission finished with error
+		feedback_.action="Mission finished with error";
+	}
 	if ((targetPosition) and (enableExecution))
-		res.boolValue = true;	//Mission finished successfully
-		
-	return true;
+	{
+		result_.succeed = true;	//Mission finished successfully
+		feedback_.action="Mission finished successfully";
+	}
+	as_.publishFeedback(feedback_);
+	as_.setSucceeded(result_);
 }
 
 
@@ -142,8 +149,11 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 		else
 			cout << "The robot has not achieved the target position. targetPosition = " << targetPosition << endl;
 
-		if (((int) safetyAlarm.data[0]) != 0)
+		if (((int) safetyMeasureAlarm.data[0]) != 0)
 			cout << "Safety alarm!!! The user has the robot control." << endl;
+
+		if (((int) safetyMeasureAlarm.data[num_sensors+1]) != 0)
+			cout << "The user has requested the robot control." << endl;
 	}
 	if (DEBUG_FLAG_DATA)
 	{
@@ -154,6 +164,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 		cout << "robotTargetPose = " << robotTargetPose.position.x << ", " << \
 				robotTargetPose.position.y << ", " << robotTargetPose.position.z << endl; 
 	}
+	ros::spinOnce();
 }
 
 
@@ -210,35 +221,29 @@ void NavPiController::GoToPose()
 	msg.twist.twist.angular.y = 0;
 	msg.twist.twist.angular.z = 0;
 	pub_odom.publish(msg);
-
-/*	cout << "---------------- FINISH -------------------- " << endl;
-	cout << msg.twist.twist << endl;*/
-	
-}
-
-
-
-void NavPiController::userControlReqCallback(const std_msgs::Bool::ConstPtr& msg)
-{
-	userControlRequest = msg->data;
-
-	if (DEBUG_FLAG_BACK)
-		cout << "userControlRequestCallback: " << userControlRequest << endl;
 }
 
 
 void NavPiController::safetyMeasuresCallback(const std_msgs::Int8MultiArray::ConstPtr& msg)
 {
-	for (int i=0; i<=num_sensors; i++)
-		safetyAlarm.data[i] = msg->data[i];
+	for (int i=0; i<=num_sensors+1; i++)
+		safetyMeasureAlarm.data[i] = msg->data[i];
+		
+	userControlRequest = msg->data[num_sensors+1];
 
 	if (DEBUG_FLAG_BACK)
 	{
-		cout << "safetyAlarm: [";
-		for (int i=0; i<=num_sensors; i++)
-			cout << safetyAlarm.data[i] << ",";
+		cout << "safetyMeasureAlarm: [";
+		for (int i=0; i<=num_sensors+1; i++)
+			cout << safetyMeasureAlarm.data[i] << " ";
 		cout << "]" << endl;
 	}
 }
 
 
+int main(int argc, char **argv)
+{
+	ros::init(argc, argv, "navigatorPIcontroller");
+	NavPiController navPiControl;
+	ros::spin();
+}

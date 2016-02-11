@@ -1,0 +1,9 @@
+#goal definition
+bool boolValue
+geometry_msgs/Pose robotTargetPosition
+---
+#result definition
+bool succeed
+---
+#feedback
+string action
