@@ -8,7 +8,7 @@
 
 #define SAT	5
 #define DEBUG_thrusterAllocator	1
-#define num_sensors				2
+#define NUM_SENSORS				2
 
 
 //Twist callback to get velocity reference
@@ -69,13 +69,13 @@ class SafetyAlarmCallback
 
 		SafetyAlarmCallback()
 		{
-			for (int i=0; i<=num_sensors; i++)
+			for (int i=0; i<=NUM_SENSORS; i++)
 				safetyAlarmData.data.push_back(0);
 		}
 
 		void callback(const std_msgs::Int8MultiArray::ConstPtr& msg)
 		{
-			for (int i=0; i<=num_sensors+1; i++)
+			for (int i=0; i<=NUM_SENSORS+1; i++)
 				safetyAlarmData.data[i] = msg->data[i];
 		}
 };
@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 
     //Send message to UWSim when user doesn't request the robot control
     //or there is any safetyAlarm
-	if ((int) safetyAlarm.safetyAlarmData.data[num_sensors+1] == 0)	
+	if ((int) safetyAlarm.safetyAlarmData.data[NUM_SENSORS+1] == 0)	
 	{
 		std_msgs::Float64MultiArray msg;
 		for (int i=0; i<5; i++)
@@ -172,7 +172,7 @@ int main(int argc, char **argv)
 	
 	if (DEBUG_thrusterAllocator)
 	{
-		if ((int) safetyAlarm.safetyAlarmData.data[num_sensors+1] == 0)	
+		if ((int) safetyAlarm.safetyAlarmData.data[NUM_SENSORS+1] == 0)	
 			std::cout << "Thrusters array: " << thrust_req[0] << ", " << thrust_req[1] << ", " << thrust_req[2] << \
 					", " <<thrust_req[3] << ", " << thrust_req[4] << std::endl;
 		else

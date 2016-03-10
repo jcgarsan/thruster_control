@@ -17,7 +17,7 @@
 #include "../include/thruster_control/navigatorPIcontroller.h"
 
 #define SAT				5
-#define num_sensors		2
+#define NUM_SENSORS		2
 
 //DEBUG Flags
 #define DEBUG_FLAG_BOOL	1
@@ -27,14 +27,14 @@
 using namespace std;
 
 
+NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", false)
 
-NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", boost::bind(&NavPiController::executeCB, this, _1), false)
 {
 	enableExecution		= false;
 	targetPosition		= false;
 	userControlRequest	= false;
 	
-	for (int i=0; i<=num_sensors; i++)
+	for (int i=0; i<=NUM_SENSORS; i++)
 		safetyMeasureAlarm.data.push_back(0);
 	
 	//Publishers initialization
@@ -45,6 +45,8 @@ NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", boost::bind(&Nav
 	sub_safetyInfo = nh.subscribe<std_msgs::Int8MultiArray>("safetyMeasures", 1, &NavPiController::safetyMeasuresCallback,this);
 
 	//Action initilization
+	as_.registerGoalCallback(boost::bind(&NavPiController::executeCB, this));
+	as_.registerPreemptCallback(boost::bind(&NavPiController::preemptCB, this));
 	as_.start();
 	ROS_INFO("Action server initialized");
 }
@@ -52,24 +54,38 @@ NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", boost::bind(&Nav
 
 NavPiController::~NavPiController()
 {
+	//Destructor
 }
 
 
-//action server
-void NavPiController::executeCB(const thruster_control::goToPoseGoalConstPtr &goal)
+/************************************************************************/
+/*						Action Server section							*/
+/************************************************************************/
+void NavPiController::executeCB()
 {
-	feedback_.action="Initializing GoToPose().action";
-	as_.publishFeedback(feedback_);
-	enableExecution = goal->boolValue;
-	robotDesiredPosition.pose.position.x = goal->robotTargetPosition.position.x;
-	robotDesiredPosition.pose.position.y = goal->robotTargetPosition.position.y;
-	robotDesiredPosition.pose.position.z = goal->robotTargetPosition.position.z;
+	thruster_control::goToPoseGoalConstPtr goal_;
 	targetPosition = false;
 	initMissionTime = ros::Time::now();	
+	feedback_.action="Initializing GoToPose().action";
+	as_.publishFeedback(feedback_);
+
+	goal_ = as_.acceptNewGoal();
+	enableExecution = goal_->startAction;
+
+	stationKeeping = goal_->stationKeeping;
+	robotDesiredPosition.pose.position.x = goal_->robotTargetPosition.position.x;
+	robotDesiredPosition.pose.position.y = goal_->robotTargetPosition.position.y;
+	robotDesiredPosition.pose.position.z = goal_->robotTargetPosition.position.z;
+	
+	if (!stationKeeping)
+		distError = 0.2;
+	else
+		distError = 0;
 
 	feedback_.action="Starting GoToPose().action";
 	as_.publishFeedback(feedback_);
-	GoToPose();
+	
+	goToPose();
 
 	feedback_.action="GoToPose().action finished";
 	as_.publishFeedback(feedback_);
@@ -81,17 +97,29 @@ void NavPiController::executeCB(const thruster_control::goToPoseGoalConstPtr &go
 	}
 	if ((targetPosition) and (enableExecution))
 	{
-		result_.succeed = true;	//Mission finished successfully
+		result_.succeed = true;		//Mission finished successfully
 		feedback_.action="Mission finished successfully";
 	}
 	as_.publishFeedback(feedback_);
 	as_.setSucceeded(result_);
 }
 
+void NavPiController::preemptCB()
+{
+	ROS_INFO("Goal Preempted");
+	feedback_.action="Goal Preempted";
+	as_.setPreempted();
+	as_.publishFeedback(feedback_);
+	result_.succeed = false;
+	as_.setAborted(result_);
+}
 
+/************************************************************************/
+/*							FUNCTIONS									*/
+/************************************************************************/
 void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValue)
 {
-	double errorDist;
+	double currentErrorDist;
 	
 	//Updating the current robot position & orientation
 	robotCurrentPose.position    = odomValue->position;
@@ -115,21 +143,21 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 	//Checking if the robot has achieved the target position
 	currentRobotTargetDist = sqrt( (double)(pow(robotTargetPose.position.x, 2)) \
 		+ (double)(pow(robotTargetPose.position.y, 2)) + (double)(pow(robotTargetPose.position.z, 2)) );
-	if ((currentRobotTargetDist < 0.3) and (enableExecution))
+	if ((currentRobotTargetDist < distError) and (enableExecution))
 	{
 		targetPosition = true;
 	}
 	
 	//Checking if the robot is stopped
-	errorDist = lastRobotTargetDist - currentRobotTargetDist;
+	currentErrorDist = lastRobotTargetDist - currentRobotTargetDist;
 	currentMissionTime = ros::Time::now();
 	totalMissionTime = currentMissionTime - initMissionTime;
 	
 	//To Fix: we need to control when the robot is stopped
 /*	cout << "currentRobotTargetDist = " << currentRobotTargetDist << endl;
-	cout << "errorDist = " << errorDist << endl;
+	cout << "currentErrorDist = " << currentErrorDist << endl;
 	cout << "totalMissionTime = " << totalMissionTime.toSec() << endl;
-	if ((abs(errorDist) < 0.000001) and (enableExecution) and (totalMissionTime.toSec() > 2.0) )
+	if ((abs(currentErrorDist) < 0.000001) and (enableExecution) and (totalMissionTime.toSec() > 2.0) )
 	{
 		//enableExecution = false;				//Error aquí!!!!!
 		cout << "robot is stopped??" << endl;
@@ -152,12 +180,12 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 		if (((int) safetyMeasureAlarm.data[0]) != 0)
 			cout << "Safety alarm!!! The user has the robot control." << endl;
 
-		if (((int) safetyMeasureAlarm.data[num_sensors+1]) != 0)
+		if (((int) safetyMeasureAlarm.data[NUM_SENSORS+1]) != 0)
 			cout << "The user has requested the robot control." << endl;
 	}
 	if (DEBUG_FLAG_DATA)
 	{
-		cout << "errorDist = " << errorDist << endl;
+		cout << "currentErrorDist = " << currentErrorDist << endl;
 		cout << "totalMissionTime = " << totalMissionTime.toSec() << endl;
 		cout << "robotErrorPose  = " << robotErrorPose.position.x << ", " << \
 				robotErrorPose.position.y << ", " << robotErrorPose.position.z << endl;
@@ -168,7 +196,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 }
 
 
-void NavPiController::GoToPose()
+void NavPiController::goToPose()
 {
 	double Itermx = 0; double Itermy = 0; double Itermz = 0;
 	double errorx = 0; double errory = 0; double errorz = 0;
@@ -224,17 +252,20 @@ void NavPiController::GoToPose()
 }
 
 
+/************************************************************************/
+/*							CALLBACKS									*/
+/************************************************************************/
 void NavPiController::safetyMeasuresCallback(const std_msgs::Int8MultiArray::ConstPtr& msg)
 {
-	for (int i=0; i<=num_sensors+1; i++)
+	for (int i=0; i<=NUM_SENSORS+1; i++)
 		safetyMeasureAlarm.data[i] = msg->data[i];
 		
-	userControlRequest = msg->data[num_sensors+1];
+	userControlRequest = msg->data[NUM_SENSORS+1];
 
 	if (DEBUG_FLAG_BACK)
 	{
 		cout << "safetyMeasureAlarm: [";
-		for (int i=0; i<=num_sensors+1; i++)
+		for (int i=0; i<=NUM_SENSORS+1; i++)
 			cout << safetyMeasureAlarm.data[i] << " ";
 		cout << "]" << endl;
 	}

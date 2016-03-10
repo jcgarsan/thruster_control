@@ -37,8 +37,10 @@ class NavPiController
 		bool 			enableExecution;
 		bool			targetPosition;
 		bool			userControlRequest;
+		bool			stationKeeping;
 		double			lastRobotTargetDist;
 		double			currentRobotTargetDist;
+		double			distError;
 
 		ros::Time		initMissionTime;
 		ros::Time		currentMissionTime;
@@ -46,7 +48,7 @@ class NavPiController
 
 		std_msgs::Int8MultiArray	safetyMeasureAlarm;
 		
-		void GoToPose();
+		void goToPose();
 		
 
 	protected:
@@ -55,6 +57,7 @@ class NavPiController
 		thruster_control::goToPoseResult   result_;
 		thruster_control::goToPoseFeedback feedback_;
 		string action_name_;
+		thruster_control::goToPoseGoalConstPtr goal;
 	
 		
 	private:
@@ -71,6 +74,6 @@ class NavPiController
 
 		void odomCallback(const geometry_msgs::Pose::ConstPtr& odomValue);
 		void safetyMeasuresCallback(const std_msgs::Int8MultiArray::ConstPtr& msg);
-		void executeCB(const thruster_control::goToPoseGoalConstPtr &goal);
-
+		void executeCB();
+		void preemptCB();
 };
