@@ -66,6 +66,7 @@ void NavPiController::executeCB()
 	thruster_control::goToPoseGoalConstPtr goal_;
 	targetPosition = false;
 	initMissionTime = ros::Time::now();	
+	lastRobotTargetDist = 999999999999;
 	feedback_.action="Initializing GoToPose().action";
 	as_.publishFeedback(feedback_);
 
@@ -120,7 +121,7 @@ void NavPiController::preemptCB()
 void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValue)
 {
 	double currentErrorDist;
-	
+
 	//Updating the current robot position & orientation
 	robotCurrentPose.position    = odomValue->position;
 	robotCurrentPose.orientation = odomValue->orientation;
@@ -138,7 +139,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 	robotErrorPose.position.y = robotTargetPose.position.y - robotLastPose.position.y;
 	robotErrorPose.position.z = robotTargetPose.position.z - robotLastPose.position.z;
 
-	lastRobotTargetDist = currentRobotTargetDist;
+	
 
 	//Checking if the robot has achieved the target position
 	currentRobotTargetDist = sqrt( (double)(pow(robotTargetPose.position.x, 2)) \
@@ -150,22 +151,22 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 	
 	//Checking if the robot is stopped
 	currentErrorDist = lastRobotTargetDist - currentRobotTargetDist;
-	currentMissionTime = ros::Time::now();
-	totalMissionTime = currentMissionTime - initMissionTime;
-	
-	//To Fix: we need to control when the robot is stopped
-/*	cout << "currentRobotTargetDist = " << currentRobotTargetDist << endl;
-	cout << "currentErrorDist = " << currentErrorDist << endl;
-	cout << "totalMissionTime = " << totalMissionTime.toSec() << endl;
-	if ((abs(currentErrorDist) < 0.000001) and (enableExecution) and (totalMissionTime.toSec() > 2.0) )
+	totalMissionTime = ros::Time::now() - currentMissionTime;
+	if (totalMissionTime.toSec() > 2.0)
 	{
-		//enableExecution = false;				//Error aquí!!!!!
-		cout << "robot is stopped??" << endl;
-	}*/
+		currentMissionTime = ros::Time::now();
+		lastRobotTargetDist = currentRobotTargetDist;
+		if ((!stationKeeping) and (enableExecution) and (currentErrorDist <= 0))
+		{
+			enableExecution = false;
+			cout << "robot is stopped??" << endl;
+		}
+	}
 
 	if (DEBUG_FLAG_BOOL)
 	{
 		cout << "currentRobotTargetDist = " << currentRobotTargetDist << endl;
+		//cout << "currentErrorDist = " << currentErrorDist << endl;
 
 		if (enableExecution)
 			cout << "The robot is working. enableExecution = " << enableExecution << endl;
