@@ -10,6 +10,7 @@
  *      Juan Carlos García
  */ 
 
+#include <fstream>
 #include <iostream>
 #include <stdlib.h>
 #include <string.h>
@@ -20,9 +21,10 @@
 #define NUM_SENSORS		2
 
 //DEBUG Flags
-#define DEBUG_FLAG_BOOL	1
-#define DEBUG_FLAG_DATA	0
-#define DEBUG_FLAG_BACK	0
+#define DEBUG_FLAG_BOOL		1
+#define DEBUG_FLAG_DATA		0
+#define DEBUG_FLAG_BACK		0
+#define DEBUG_FLAG_FILEOUT	0
 
 using namespace std;
 
@@ -49,12 +51,29 @@ NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", false)
 	as_.registerPreemptCallback(boost::bind(&NavPiController::preemptCB, this));
 	as_.start();
 	ROS_INFO("Action server initialized");
+	
+	//File init
+	if (DEBUG_FLAG_FILEOUT)
+	{
+		output.open("data.txt");
+		if (output.is_open())
+			ROS_INFO("File opened successfully");
+		else
+		{
+			ROS_INFO("File opened unsuccessfully");
+			exit(0);
+		}
+	}
+
+	
 }
 
 
 NavPiController::~NavPiController()
 {
 	//Destructor
+	if (DEBUG_FLAG_FILEOUT)
+		output.close();
 }
 
 
@@ -139,34 +158,26 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 	robotErrorPose.position.y = robotTargetPose.position.y - robotLastPose.position.y;
 	robotErrorPose.position.z = robotTargetPose.position.z - robotLastPose.position.z;
 
-	
-
 	//Checking if the robot has achieved the target position
 	currentRobotTargetDist = sqrt( (double)(pow(robotTargetPose.position.x, 2)) \
 		+ (double)(pow(robotTargetPose.position.y, 2)) + (double)(pow(robotTargetPose.position.z, 2)) );
 	if ((currentRobotTargetDist < distError) and (enableExecution))
-	{
 		targetPosition = true;
-	}
 	
 	//Checking if the robot is stopped
 	currentErrorDist = lastRobotTargetDist - currentRobotTargetDist;
 	totalMissionTime = ros::Time::now() - currentMissionTime;
-	if (totalMissionTime.toSec() > 2.0)
+	if (totalMissionTime.toSec() > 3.0)
 	{
 		currentMissionTime = ros::Time::now();
 		lastRobotTargetDist = currentRobotTargetDist;
 		if ((!stationKeeping) and (enableExecution) and (currentErrorDist <= 0))
-		{
 			enableExecution = false;
-			cout << "robot is stopped??" << endl;
-		}
 	}
 
 	if (DEBUG_FLAG_BOOL)
 	{
 		cout << "currentRobotTargetDist = " << currentRobotTargetDist << endl;
-		//cout << "currentErrorDist = " << currentErrorDist << endl;
 
 		if (enableExecution)
 			cout << "The robot is working. enableExecution = " << enableExecution << endl;
@@ -262,6 +273,11 @@ void NavPiController::safetyMeasuresCallback(const std_msgs::Int8MultiArray::Con
 		safetyMeasureAlarm.data[i] = msg->data[i];
 		
 	userControlRequest = msg->data[NUM_SENSORS+1];
+
+	//Save data into a file
+	if (DEBUG_FLAG_FILEOUT)
+		output << totalMissionTime << "\t" << currentRobotTargetDist << "\t" << userControlRequest << "\n" << targetPosition;
+
 
 	if (DEBUG_FLAG_BACK)
 	{

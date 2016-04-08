@@ -47,6 +47,8 @@ class NavPiController
 		ros::Duration	totalMissionTime;
 
 		std_msgs::Int8MultiArray	safetyMeasureAlarm;
+
+		ofstream output;
 		
 		void goToPose();
 		
