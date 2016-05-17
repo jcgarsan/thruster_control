@@ -60,7 +60,6 @@ class DVLCallback
 };
 
 
-
 //SafetyAlarmCallback avoids publishing thruster data when safetyAlarm is true
 class SafetyAlarmCallback
 {
