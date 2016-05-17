@@ -171,7 +171,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 	{
 		currentMissionTime = ros::Time::now();
 		lastRobotTargetDist = currentRobotTargetDist;
-		if ((!stationKeeping) and (enableExecution) and (currentErrorDist <= 0))
+		if ((!stationKeeping) and (enableExecution) and (currentErrorDist <= 0) and (!userControlRequest))
 			enableExecution = false;
 	}
 
