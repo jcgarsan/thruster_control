@@ -18,7 +18,7 @@
 #include "../include/thruster_control/navigatorPIcontroller.h"
 
 #define SAT				5
-#define NUM_SENSORS		2
+#define num_sensors		2
 
 //DEBUG Flags
 #define DEBUG_FLAG_BOOL		1
@@ -34,17 +34,21 @@ NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", false)
 {
 	enableExecution		= false;
 	targetPosition		= false;
-	userControlRequest	= false;
+	//userControlRequest	= false;
 	
-	for (int i=0; i<=NUM_SENSORS; i++)
+	for (int i=0; i<=num_sensors; i++)
 		safetyMeasureAlarm.data.push_back(0);
 	
+	for (int i=0; i<2; i++)
+		userControlAlarm.data.push_back(0);
+		
 	//Publishers initialization
 	pub_odom = nh.advertise<nav_msgs::Odometry>("dataNavigator", 1);
 	
 	//Subscribers initialization
 	sub_odomInfo = nh.subscribe<geometry_msgs::Pose>("g500/pose", 1, &NavPiController::odomCallback, this);
-	sub_safetyInfo = nh.subscribe<std_msgs::Int8MultiArray>("safetyMeasures", 1, &NavPiController::safetyMeasuresCallback,this);
+	sub_userControl = nh.subscribe<std_msgs::Int8MultiArray>("userControlAlarm", 1, &NavPiController::userControlCallback,this);
+	sub_safetyMeasures = nh.subscribe<std_msgs::Int8MultiArray>("safetyMeasuresAlarm", 1, &NavPiController::safetyMeasuresCallback,this);
 
 	//Action initilization
 	as_.registerGoalCallback(boost::bind(&NavPiController::executeCB, this));
@@ -64,8 +68,6 @@ NavPiController::NavPiController() : as_ (nh, "GoToPoseAction", false)
 			exit(0);
 		}
 	}
-
-	
 }
 
 
@@ -124,6 +126,7 @@ void NavPiController::executeCB()
 	as_.setSucceeded(result_);
 }
 
+
 void NavPiController::preemptCB()
 {
 	ROS_INFO("Goal Preempted");
@@ -133,6 +136,7 @@ void NavPiController::preemptCB()
 	result_.succeed = false;
 	as_.setAborted(result_);
 }
+
 
 /************************************************************************/
 /*							FUNCTIONS									*/
@@ -171,7 +175,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 	{
 		currentMissionTime = ros::Time::now();
 		lastRobotTargetDist = currentRobotTargetDist;
-		if ((!stationKeeping) and (enableExecution) and (currentErrorDist <= 0) and (!userControlRequest))
+		if ((!stationKeeping) and (enableExecution) and (currentErrorDist <= 0) and (!userControlAlarm.data[0]))
 			enableExecution = false;
 	}
 
@@ -192,7 +196,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 		if (((int) safetyMeasureAlarm.data[0]) != 0)
 			cout << "Safety alarm!!! The user has the robot control." << endl;
 
-		if (((int) safetyMeasureAlarm.data[NUM_SENSORS+1]) != 0)
+		if (((int) safetyMeasureAlarm.data[num_sensors+1]) != 0)
 			cout << "The user has requested the robot control." << endl;
 	}
 	if (DEBUG_FLAG_DATA)
@@ -218,7 +222,7 @@ void NavPiController::goToPose()
 	
 	while ((enableExecution) and (!targetPosition))
 	{
-		if ((!userControlRequest) )
+		if ((!userControlAlarm.data[0]) )
 		{
 			//Compute control law
 			errorx = gain * (robotTargetPose.position.x);
@@ -269,25 +273,33 @@ void NavPiController::goToPose()
 /************************************************************************/
 void NavPiController::safetyMeasuresCallback(const std_msgs::Int8MultiArray::ConstPtr& msg)
 {
-	for (int i=0; i<=NUM_SENSORS+1; i++)
+	for (int i=0; i<=num_sensors; i++)
 		safetyMeasureAlarm.data[i] = msg->data[i];
-		
-	userControlRequest = msg->data[NUM_SENSORS+1];
-
-	//Save data into a file
-	if (DEBUG_FLAG_FILEOUT)
-		output << totalMissionTime << "\t" << currentRobotTargetDist << "\t" << userControlRequest << "\n" << targetPosition;
-
 
 	if (DEBUG_FLAG_BACK)
 	{
 		cout << "safetyMeasureAlarm: [";
-		for (int i=0; i<=NUM_SENSORS+1; i++)
+		for (int i=0; i<=num_sensors; i++)
 			cout << safetyMeasureAlarm.data[i] << " ";
 		cout << "]" << endl;
 	}
 }
 
+
+void NavPiController::userControlCallback(const std_msgs::Int8MultiArray::ConstPtr& msg)
+{
+	//userControlRequest = msg->data[0];
+	for (int i=0; i<2; i++)
+		userControlAlarm.data[i] = msg->data[i];
+
+	//Save data into a file
+	if (DEBUG_FLAG_FILEOUT)
+		output << totalMissionTime << "\t" << currentRobotTargetDist << "\t" << userControlAlarm.data[0] << "\n" << targetPosition;
+
+	if (DEBUG_FLAG_BACK)
+		cout << "userControlAlarm: [" << (int) userControlAlarm.data[0] << ", " << (int) userControlAlarm.data[1] << "]" << endl;
+
+}
 
 int main(int argc, char **argv)
 {

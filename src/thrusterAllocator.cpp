@@ -8,7 +8,6 @@
 
 #define SAT	5
 #define DEBUG_thrusterAllocator	1
-#define NUM_SENSORS				2
 
 
 //Twist callback to get velocity reference
@@ -61,31 +60,31 @@ class DVLCallback
 
 
 //SafetyAlarmCallback avoids publishing thruster data when safetyAlarm is true
-class SafetyAlarmCallback
+class UserControlCallback
 {
 	public:
-		std_msgs::Int8MultiArray	safetyAlarmData;
+		std_msgs::Int8MultiArray  userControlAlarm;
 
-		SafetyAlarmCallback()
+		UserControlCallback()
 		{
-			for (int i=0; i<=NUM_SENSORS; i++)
-				safetyAlarmData.data.push_back(0);
+			for (int i=0; i<2; i++)
+				userControlAlarm.data.push_back(0);
 		}
 
 		void callback(const std_msgs::Int8MultiArray::ConstPtr& msg)
 		{
-			for (int i=0; i<=NUM_SENSORS+1; i++)
-				safetyAlarmData.data[i] = msg->data[i];
+			for (int i=0; i<2; i++)
+				userControlAlarm.data[i] = msg->data[i];
 		}
 };
 
 
 int main(int argc, char **argv)
 {
-  std::string twist_topic, thrusters_topic, dvl_topic, safetyAlarm_topic; 
+  std::string twist_topic, thrusters_topic, dvl_topic, userControl_topic; 
   TwistCallback twist;
   DVLCallback dvl;
-  SafetyAlarmCallback safetyAlarm;
+  UserControlCallback userControl;
 
   ros::init(argc, argv, "vehicleThrusterAllocator");
   ros::NodeHandle nh;
@@ -93,11 +92,11 @@ int main(int argc, char **argv)
   nh.param("twist", twist_topic, (std::string)"/dataNavigator");
   nh.param("thrusters", thrusters_topic, (std::string)"/g500/thrusters_input");
   nh.param("dvl", dvl_topic, (std::string)"/g500/dvl");
-  nh.param("safetyAlam", safetyAlarm_topic, (std::string)"/safetyMeasures");
+  nh.param("userControl", userControl_topic, (std::string)"/userControlAlarm");
 
   ros::Subscriber sub_twist = nh.subscribe(twist_topic, 1000, &TwistCallback::callback,&twist);
   ros::Subscriber sub_dvl = nh.subscribe(dvl_topic, 1000, &DVLCallback::callback,&dvl);
-  ros::Subscriber sub_safetyAlarm = nh.subscribe(safetyAlarm_topic, 1000, &SafetyAlarmCallback::callback,&safetyAlarm);
+  ros::Subscriber sub_userControl = nh.subscribe(userControl_topic, 1000, &UserControlCallback::callback,&userControl);
   ros::Publisher  pub=nh.advertise<std_msgs::Float64MultiArray>(thrusters_topic, 1);
 
   ros::Rate loop_rate(200);
@@ -121,7 +120,7 @@ int main(int argc, char **argv)
 
     //Send message to UWSim when user doesn't request the robot control
     //or there is any safetyAlarm
-	if ((int) safetyAlarm.safetyAlarmData.data[NUM_SENSORS+1] == 0)	
+	if ((int) userControl.userControlAlarm.data[0] == 0)	
 	{
 		std_msgs::Float64MultiArray msg;
 		for (int i=0; i<5; i++)
@@ -131,7 +130,7 @@ int main(int argc, char **argv)
 	
 	if (DEBUG_thrusterAllocator)
 	{
-		if ((int) safetyAlarm.safetyAlarmData.data[NUM_SENSORS+1] == 0)	
+		if ((int) userControl.userControlAlarm.data[0] == 0)	
 			std::cout << "Thrusters array: " << thrust_req[0] << ", " << thrust_req[1] << ", " << thrust_req[2] << \
 					", " <<thrust_req[3] << ", " << thrust_req[4] << std::endl;
 		else
