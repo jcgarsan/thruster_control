@@ -171,7 +171,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 	//Checking if the robot is stopped
 	currentErrorDist = lastRobotTargetDist - currentRobotTargetDist;
 	totalMissionTime = ros::Time::now() - currentMissionTime;
-	if (totalMissionTime.toSec() > 3.0)
+	if (totalMissionTime.toSec() > 5.0)
 	{
 		currentMissionTime = ros::Time::now();
 		lastRobotTargetDist = currentRobotTargetDist;
