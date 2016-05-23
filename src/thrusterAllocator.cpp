@@ -79,12 +79,32 @@ class UserControlCallback
 };
 
 
+class SafetyMeasuresCallback
+{
+	public:
+		std_msgs::Int8MultiArray  safetyMeasuresAlarm;
+
+		SafetyMeasuresCallback()
+		{
+			for (int i=0; i<2; i++)
+				safetyMeasuresAlarm.data.push_back(0);
+		}
+
+		void callback(const std_msgs::Int8MultiArray::ConstPtr& msg)
+		{
+			for (int i=0; i<2; i++)
+				safetyMeasuresAlarm.data[i] = msg->data[i];
+		}
+};
+
+
 int main(int argc, char **argv)
 {
-  std::string twist_topic, thrusters_topic, dvl_topic, userControl_topic; 
-  TwistCallback twist;
-  DVLCallback dvl;
-  UserControlCallback userControl;
+  std::string twist_topic, thrusters_topic, dvl_topic, userControl_topic, safetyMeasures_topic; 
+  TwistCallback 			twist;
+  DVLCallback 				dvl;
+  UserControlCallback		userControl;
+  SafetyMeasuresCallback	safetyMeasures;
 
   ros::init(argc, argv, "vehicleThrusterAllocator");
   ros::NodeHandle nh;
@@ -93,10 +113,13 @@ int main(int argc, char **argv)
   nh.param("thrusters", thrusters_topic, (std::string)"/g500/thrusters_input");
   nh.param("dvl", dvl_topic, (std::string)"/g500/dvl");
   nh.param("userControl", userControl_topic, (std::string)"/userControlAlarm");
+  nh.param("safetyMeasures", safetyMeasures_topic, (std::string)"/safetyMeasuresAlarm");
 
   ros::Subscriber sub_twist = nh.subscribe(twist_topic, 1000, &TwistCallback::callback,&twist);
   ros::Subscriber sub_dvl = nh.subscribe(dvl_topic, 1000, &DVLCallback::callback,&dvl);
   ros::Subscriber sub_userControl = nh.subscribe(userControl_topic, 1000, &UserControlCallback::callback,&userControl);
+  ros::Subscriber sub_safetyMeasures = nh.subscribe(safetyMeasures_topic, 1000, &SafetyMeasuresCallback::callback,&safetyMeasures);
+
   ros::Publisher  pub=nh.advertise<std_msgs::Float64MultiArray>(thrusters_topic, 1);
 
   ros::Rate loop_rate(200);
@@ -118,9 +141,10 @@ int main(int argc, char **argv)
 	thrust_req[3]=-(twist.linear[2]-dvl.linear[2])*5;
 	thrust_req[4]=(twist.linear[1]+dvl.linear[1])*6;
 
-    //Send message to UWSim when user doesn't request the robot control
-    //or there is any safetyAlarm
-	if ((int) userControl.userControlAlarm.data[0] == 0)	
+    //Send message to UWSim when:
+    //- user doesn't request the robot control
+    //- there isn't any safetyAlarm
+	if (((int) userControl.userControlAlarm.data[0] == 0) and ((int) safetyMeasures.safetyMeasuresAlarm.data[0] == 0))
 	{
 		std_msgs::Float64MultiArray msg;
 		for (int i=0; i<5; i++)
