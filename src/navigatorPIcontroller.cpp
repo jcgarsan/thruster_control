@@ -196,7 +196,7 @@ void NavPiController::odomCallback(const geometry_msgs::Pose::ConstPtr& odomValu
 		if (((int) safetyMeasureAlarm.data[0]) != 0)
 			cout << "Safety alarm!!! The user has the robot control." << endl;
 
-		if (((int) safetyMeasureAlarm.data[num_sensors+1]) != 0)
+		if (((int) userControlAlarm.data[0]) != 0)
 			cout << "The user has requested the robot control." << endl;
 	}
 	if (DEBUG_FLAG_DATA)
